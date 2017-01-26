@@ -45,7 +45,7 @@ module run_cells_m
 
       ! initializing parameters
       call  parameters_init(cell_radius, ntype, density, interface_width, tstep, dt, Lsize, dr, dir_name, iseed,&
-           np_bndry, depletion_weight, adh1, adh2, output_period, periodic)
+           np_bndry, depletion_weight, adh11, adh12, output_period, periodic)
 
       ! number of points in the mesh
       np = 8*Lsize(1)*Lsize(2)*Lsize(3) ! number of points
@@ -101,12 +101,21 @@ module run_cells_m
       call gen_cell_points(cell_radius,sphere,np_sphere)
 
 
+      ! adhesions
+      adh1(1,1) = adh11
+      adh1(2,2) = adh11
+      adh1(1,2) = adh12
+      adh1(2,1) = adh1(1,2)
+      adh2(1) = 1.49*adh1(1,1)
+      adh2(2) = 1.49*adh1(2,2)
+
       volume_target = (4.d0/3.d0)*M_PI*cell_radius**3
       vol_lagrangian = 1.d0
-      adh2 = 1.49*adh1
       scoef = 1.0
       metcoef = 0.d0
-      chi = 4.d0
+      chi(2) = 4.d0
+      chi(1) = 0.d0
+      chemresponse(1) = 0.d0
       adhs = 0.5
       ! initializing simulation box
 
@@ -129,13 +138,19 @@ module run_cells_m
 
               tcell = tcell +  1
               r(tcell) = lxyz_inv(-Lsize(1)+int(cell_radius)+1,j,k)
-              ncell(:) = tcell
+
             end if
 
           end do
         end do
 
       end if
+      r(tcell+1) = r(13)
+      r(13) = r(tcell)
+      r(tcell) = r(tcell+1)
+
+      ncell(1) = tcell-1
+      ncell(2) = 1
 
       ALLOCATE(cell(0:np_part,tcell))
       ALLOCATE(adhesion(0:np_part,tcell))
@@ -176,10 +191,15 @@ module run_cells_m
       call gen_cell_points(2.0,porous,np_porous)
       call substrate_init(porosity, s, np, porous, np_porous, Lsize, lxyz, lxyz_inv, iseed)
       call sch(s(0:np), 100, np, 0.25, lxyz, lxyz_inv)
-      do icell=1,tcell
-        do i=1, np_sphere
-          s(lxyz_inv(lxyz(r(icell),1)+sphere(i,1),lxyz(r(icell),2)+sphere(i,2),lxyz(r(icell),3)+sphere(i,3) ) ) = 0.d0
-        end do
+      !do icell=1,tcell
+      !  do i=1, np_sphere
+      !    s(lxyz_inv(lxyz(r(icell),1)+sphere(i,1),lxyz(r(icell),2)+sphere(i,2),lxyz(r(icell),3)+sphere(i,3) ) ) = 0.d0
+      !  end do
+      !end do
+      do ip=1, np
+        if(lxyz(ip,1)<=-Lsize(1)+2*cell_radius+1) then
+          s(ip) = 0.d0
+        end if
       end do
       ! calculating the h(s) function
       do ip=1, np
@@ -245,26 +265,33 @@ module run_cells_m
                  ! functiona f(u_m,s,phi) - > f(cell(:,icell)%phi,aux(:,itype)%phi)
                  fnu = fnu + aux(ip_global,itype)%phi - hfunc( cell(ip,icell)%phi )*deltak(cell(ip,icell)%itype,itype)
                  ! function g_int(phi_m,aux) - calculate the adhesion term
-                 adhesion(ip,icell) = adhesion(ip,icell) + &
+                 adhesion(ip,icell) = adhesion(ip,icell) + adh1(cell(ip,icell)%itype,itype)* &
                  (aux(ip_global,itype)%phi - hfunc( cell(ip,icell)%phi )*deltak(cell(ip,icell)%itype,itype))
                  !eta(cell(ip,icell)%itype,itype)
               end do
               ! summing the first contribution for the chemical energy
               ! the adhesion term will be summed after
           !    hfield(ip,icell) = hfunc(cell(ip,icell)%phi)
-
-              chemresponse = &
-               cell(lxyz_inv_part(lxyz_part(ip,1)+1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1)+1,lxyz(ip_global,2),lxyz(ip_global,3)),1) - &
-               cell(lxyz_inv_part(lxyz_part(ip,1)-1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1)-1,lxyz(ip_global,2),lxyz(ip_global,3)),1) + &
-               cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2)+1,lxyz_part(ip,3)),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2)+1,lxyz(ip_global,3)),2) - &
-               cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2)-1,lxyz_part(ip,3)),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2)-1,lxyz(ip_global,3)),2) + &
-               cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2),lxyz_part(ip,3)+1),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2),lxyz(ip_global,3)+1),3) - &
-               cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2),lxyz_part(ip,3)-1),icell)%phi*gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2),lxyz(ip_global,3)-1),3)
-
+              if(cell(ip,icell)%itype.eq.2) then
+                chemresponse(2) = &
+                  cell(lxyz_inv_part(lxyz_part(ip,1)+1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1)+1,lxyz(ip_global,2),lxyz(ip_global,3)),1) - &
+                  cell(lxyz_inv_part(lxyz_part(ip,1)-1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1)-1,lxyz(ip_global,2),lxyz(ip_global,3)),1) + &
+                  cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2)+1,lxyz_part(ip,3)),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2)+1,lxyz(ip_global,3)),2) - &
+                  cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2)-1,lxyz_part(ip,3)),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2)-1,lxyz(ip_global,3)),2) + &
+                  cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2),lxyz_part(ip,3)+1),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2),lxyz(ip_global,3)+1),3) - &
+                  cell(lxyz_inv_part(lxyz_part(ip,1),lxyz_part(ip,2),lxyz_part(ip,3)-1),icell)%phi*&
+                  gchem(lxyz_inv(lxyz(ip_global,1),lxyz(ip_global,2),lxyz(ip_global,3)-1),3)
+              end if
               cell(ip,icell)%mu = interface_width*cell(ip,icell)%lapl_phi +&
                    cell(ip,icell)%phi*(1.d0-cell(ip,icell)%phi)*(cell(ip,icell)%phi - 0.50 + &
                    vol_lagrangian*(volume_target-volume(icell)) - depletion_weight*fnu - scoef*hfunc(s(ip_global))) -&
-                   chi*chemresponse/2.d0 + metcoef*(8.0-16.0*ran2(iseed) )*cell(ip,icell)%phi*(1.d0-cell(ip,icell)%phi)
+                   chi(cell(ip,icell)%itype)*chemresponse(cell(ip,icell)%itype)/2.d0 + metcoef*(8.0-16.0*ran2(iseed) )*&
+                   cell(ip,icell)%phi*(1.d0-cell(ip,icell)%phi)
 
 
             end do
@@ -286,7 +313,7 @@ module run_cells_m
            do icell=1, tcell
              call vec_local2global(ip_global, r(icell), ip, lxyz, lxyz_inv, lxyz_part)
              cell(ip,icell)%mu =  cell(ip,icell)%mu + cell(ip,icell)%phi*(1.0-cell(ip,icell)%phi)*&
-                                  (adh1*cell(ip,icell)%lapl_h + adh2*hfield_lapl(ip,icell)) + & ! 0.0065 , 0.01
+                                  (cell(ip,icell)%lapl_h + adh2(cell(ip,icell)%itype)*hfield_lapl(ip,icell)) + &
                                   adhs*cell(ip,icell)%phi*(1.d0 -cell(ip,icell)%phi)*shfield_lapl(ip_global)
            end do
          end do

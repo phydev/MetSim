@@ -42,7 +42,7 @@ module global_m
   ! chemical and substrate variables
   real, allocatable, public :: chem(:), gchem(:,:), s(:), shfield(:), shfield_lapl(:), &
   sources(:), chem_lapl(:)
-  real, public :: chemresponse, metcoef, chi, scoef, adhs
+  real, public :: chemresponse(2), metcoef, chi(2), scoef, adhs
   ! velocity
   real, public, allocatable :: velocity(:), path(:)
   real, public :: rt(3), vt(3)
@@ -69,7 +69,7 @@ module global_m
   ! coupling constants between the cell_radius
   real, allocatable, public :: gamma_l(:), eta(:,:), beta(:,:), volume(:)
   real, allocatable, public :: adhesion(:,:), hfield(:,:), hfield_lapl(:,:)
-  real, public :: adh1, adh2, v1, v2, volume_target, vol_lagrangian
+  real, public :: adh11, adh12, adh1(2,2), adh2(2), v1, v2, volume_target, vol_lagrangian
   integer, public :: cm_calc_counter
 
 
