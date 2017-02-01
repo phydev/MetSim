@@ -30,7 +30,7 @@ module sim_init_m
         ip = ran2(idum)*np ! random point
         theta = ran2(idum)*M_TWO*M_PI ! random direction
         phi = ran2(idum)*M_PI
-        v(1:3) = (/ sin(phi)*cos(theta), sin(phi)*cos(theta), cos(phi) /)
+        v(1:3) = (/ sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi) /)
         ip2 = lxyz_inv(int(anint(lxyz(ip,1) + v(1))), int(anint(lxyz(ip,2) + v(2))), int(anint(lxyz(ip,3) + v(3))))
         n = 0
         dv(:) = v(:)
@@ -97,8 +97,8 @@ module sim_init_m
 
       ! input variables
       type(mesh_t), allocatable, intent(inout) :: cell(:,:)
-      integer, allocatable, intent(in) :: lxyz_part(:,:), lxyz_inv_part(:,:,:)
-      integer, intent(in) ::  tcell, sphere(:,:), np_sphere, np_part, ncell(:)
+      integer, allocatable, intent(in) :: lxyz_part(:,:), lxyz_inv_part(:,:,:), ncell(:)
+      integer, intent(in) ::  tcell, sphere(:,:), np_sphere, np_part
       logical, intent(in) :: first
 
       ! internal only
@@ -223,7 +223,9 @@ module sim_init_m
                hs(1) = heaviside(real(i))
                hs(2) = heaviside(real(j))
                hs(3) = heaviside(real(k))
+
                if( abs(i)>Lsize(1)-hs(1)) then
+
                   boundary = .true.
                   if(periodic) then
                      l = i - SIGN(1,i)*(2*Lsize(1))
@@ -288,12 +290,13 @@ module sim_init_m
 
 
     subroutine parameters_init(cell_radius, ntypes, density,  interface_width, tstep, dt, Lsize, dr, dir_name, iseed,&
-        np_bndry, depletion_weight,adh1, adh2, output_period, periodic)
+        np_bndry, depletion_weight,adh1, adhs, chi, metcoef, output_period, periodic)
 
       implicit none
 
       real, allocatable, intent(inout) :: density(:)
-      real, intent(inout) :: cell_radius,  interface_width, dt, depletion_weight, adh1, adh2
+      real, intent(inout) :: cell_radius,  interface_width, dt, &
+      depletion_weight, adh1, adhs, chi, metcoef
       integer, intent(inout) :: tstep, Lsize(3), np_bndry, dr(3), output_period, ntypes
       integer, intent(in) :: iseed
       character(len=3), intent(in) :: dir_name
@@ -320,7 +323,9 @@ module sim_init_m
       read(1,*) np_bndry, temp ! boundary points
       read(1,*) depletion_weight, temp ! repulsive force coefficient
       read(1,*) adh1, temp ! adhesion const 1
-      read(1,*) adh2, temp ! adhesion const 2
+      read(1,*) adhs, temp ! adhesion with the ECM
+      read(1,*) chi, temp ! chemotactic coefficient
+      read(1,*) metcoef, temp ! random coefficient
       read(1,*) output_period, temp ! the period which the data will be written to the output
       read(1,*) periodic, temp ! boundary conditions
       CLOSE(1)
@@ -338,8 +343,10 @@ module sim_init_m
       write(2,'(I10,A)') iseed, " iseed" ! Initial Seed for RAN2
       write(2,'(I10,A)') np_bndry, " bounary_points"! boundary points
       write(2,'(F10.2,A)') depletion_weight, " depletion_weight" ! repulsive force coefficient
-      write(2,'(F10.2,A)') adh1, " adh1" ! constant adhesion 1
-      write(2,'(F10.2,A)') adh2, " adh2" ! constant adhesion 2
+      write(2,'(F10.2,A)') adh1, " cell-cell adhesion" ! constant adhesion 1
+      write(2,'(F10.2,A)') adhs, " cell-ecm adhesion" ! Cell-ECM adhesion
+      write(2,'(F10.2,A)') chi, " chi - chemotaxis" ! chemotactic coefficient
+      write(2,'(F10.2,A)') metcoef, " random coeficcient" ! Cell-ECM adhesion
       write(2,'(I10,A)') output_period, " output_period" ! the period which the data will be written to the output
       write(2,'(L1,A) ') periodic, " periodic" ! boundary conditions
       CLOSE(2)
@@ -350,7 +357,8 @@ module sim_init_m
     subroutine print_header(Lsize, tcell, ntypes, ncell, dir_name, periodic)
 
       implicit none
-      integer, intent(in) :: Lsize(1:3), ntypes, ncell(:), tcell
+      integer, intent(in) :: Lsize(1:3), ntypes, tcell
+      integer, allocatable, intent(in) :: ncell(:)
       character(len=255) :: cwd, hostname
       character(len=32) :: username
       character(8)  :: date
@@ -369,7 +377,7 @@ module sim_init_m
       call getlog(username)
       write(*,'(A)') "                                Running Cell3D"
       write(*,'(A)') "       "
-      write(*,'(A)') "Version        :       1.0.s (December 14, 2016)"
+      write(*,'(A)') "Version        :       2.0.s (January 26, 2017)"
       write(*,'(A,A)') "Locate         :       ", trim(cwd)
       write(*,'(A,A)') "User           :       ", trim(username)
       write(*,'(A)') "Developer      :       Moreira, M."

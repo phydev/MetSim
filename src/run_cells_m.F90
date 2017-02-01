@@ -45,7 +45,7 @@ module run_cells_m
 
       ! initializing parameters
       call  parameters_init(cell_radius, ntype, density, interface_width, tstep, dt, Lsize, dr, dir_name, iseed,&
-           np_bndry, depletion_weight, adh11, adh12, output_period, periodic)
+           np_bndry, depletion_weight, adh11, adhs, chi(1), metcoef, output_period, periodic)
 
       ! number of points in the mesh
       np = 8*Lsize(1)*Lsize(2)*Lsize(3) ! number of points
@@ -53,8 +53,8 @@ module run_cells_m
 
       ALLOCATE(ncell(0:ntype))
 
-      ncell(0:ntype) = 0 ! (np*density(1:ntype))/(4*cell_radius**2)
-      tcell = 0!sum(ncell(1:ntype))
+      ncell(0:ntype) = 1 ! (np*density(1:ntype))/(4*cell_radius**2)
+      tcell = 1!sum(ncell(1:ntype))
 
       ! partition mesh
       Lsize_part(1:3) = (/10, 10, 10/)
@@ -104,26 +104,28 @@ module run_cells_m
       ! adhesions
       adh1(1,1) = adh11
       adh1(2,2) = adh11
-      adh1(1,2) = adh12
-      adh1(2,1) = adh1(1,2)
+    !  adh1(1,2) = adh12
+  !    adh1(2,1) = adh1(1,2)
       adh2(1) = 1.49*adh1(1,1)
       adh2(2) = 1.49*adh1(2,2)
 
       volume_target = (4.d0/3.d0)*M_PI*cell_radius**3
       vol_lagrangian = 1.d0
       scoef = 1.0
-      metcoef = 0.d0
+      !metcoef = 1.d0
       chi(2) = 4.d0
-      chi(1) = 0.d0
-      chemresponse(1) = 0.d0
-      adhs = 0.5
+      !chi(1) = 10.d0
+      chemresponse(1) = 1.d0
+      !adhs = 0.5
       ! initializing simulation box
 
       if(tcell.eq.2) then
         r(1) = lxyz_inv(0,-7,0) !(-6,10)
         r(2) = lxyz_inv(0,7,0) !(8,-10)
       elseif(tcell.eq.1) then
-        r(1) = lxyz_inv(-15,-5,0)
+
+        ncell(1) = 1
+        r(1) = lxyz_inv(-Lsize(1)+int(cell_radius)+1,0,0)
       elseif(tcell.eq.0) then
 
         do j = -Lsize(2)+int(cell_radius), Lsize(2)-1
@@ -145,12 +147,12 @@ module run_cells_m
         end do
 
       end if
-      r(tcell+1) = r(13)
-      r(13) = r(tcell)
-      r(tcell) = r(tcell+1)
+      !r(tcell+1) = r(5)
+      !r(5) = r(tcell)
+      !r(tcell) = r(tcell+1)
 
-      ncell(1) = tcell-1
-      ncell(2) = 1
+      !ncell(1) = tcell-1
+      !ncell(2) = 1
 
       ALLOCATE(cell(0:np_part,tcell))
       ALLOCATE(adhesion(0:np_part,tcell))
@@ -188,7 +190,7 @@ module run_cells_m
         write(*,'(A,F10.2)') "Distance between the cells", REAL(lxyz(r(1),2))-REAL(lxyz(r(2),2))
       end if
 
-      call gen_cell_points(2.0,porous,np_porous)
+      call gen_cell_points(1.0,porous,np_porous)
       call substrate_init(porosity, s, np, porous, np_porous, Lsize, lxyz, lxyz_inv, iseed)
       call sch(s(0:np), 100, np, 0.25, lxyz, lxyz_inv)
       !do icell=1,tcell
@@ -222,7 +224,7 @@ module run_cells_m
       cm_calc_counter = 0
       vcounter = 100
       path(:) = 0.d0
-      open(UNIT=500, FILE=dir_name//'/vt.dat')
+
       write(*,'(A)') "Initiating the core program... "
       do while(nstep<=tstep)
          nstep = nstep + 1
@@ -272,8 +274,8 @@ module run_cells_m
               ! summing the first contribution for the chemical energy
               ! the adhesion term will be summed after
           !    hfield(ip,icell) = hfunc(cell(ip,icell)%phi)
-              if(cell(ip,icell)%itype.eq.2) then
-                chemresponse(2) = &
+              if(cell(ip,icell)%itype.eq.1) then
+                chemresponse(1) = &
                   cell(lxyz_inv_part(lxyz_part(ip,1)+1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*&
                   gchem(lxyz_inv(lxyz(ip_global,1)+1,lxyz(ip_global,2),lxyz(ip_global,3)),1) - &
                   cell(lxyz_inv_part(lxyz_part(ip,1)-1,lxyz_part(ip,2),lxyz_part(ip,3)),icell)%phi*&
@@ -379,9 +381,9 @@ module run_cells_m
 
             OPEN (UNIT=100,FILE=dir_name//'/phi'//trim(file_name)//'.xyz')
             !OPEN (UNIT=nstep+2,FILE=dir_name//'/phib'//trim(file_name)//'.xyz')
-            OPEN(UNIT=500, FILE=dir_name//'/c'//trim(file_name)//'.xyz')
+            OPEN(UNIT=1000, FILE=dir_name//'/path'//trim(file_name)//'.xyz')
             do ip=1, np
-              write(500,'(I10,I10,I10,F10.4)') lxyz(ip,1:3), chem(ip)
+              if(path(ip).gt.0)  write(1000,'(I10,I10,I10,F10.4)') lxyz(ip,1:3), path(ip)
               do itype = 1, ntype
                  if(aux(ip,itype)%phi>0.0) then
                     write(100,'(I10,I10,I10, F10.2,I10)') lxyz(ip,1:3),aux(ip,itype)%phi, itype
@@ -399,7 +401,7 @@ module run_cells_m
               end do
             end do
             close(100)
-            close(500)
+            close(1000)
             !close(nstep+2)
 
          end if
@@ -407,7 +409,7 @@ module run_cells_m
 
 
       end do
-      close(500)
+
       if(tcell.eq.2) then
         call cm_calc(r_cm, cell, tcell, np, np_part, r, lxyz, lxyz_inv, lxyz_inv_part)
         write(*,'(A,F10.2,F10.2)') "Cell 1 - End Position", r_cm(1,2)
